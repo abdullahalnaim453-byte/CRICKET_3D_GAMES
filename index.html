@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>3D World Cricket Championship - Ultimate Edition</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome & Google Fonts -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+    <!-- Three.js & Nipple.js (Joystick for mobile) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
+    
+    <style>
+        * {
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background-color: #050b14;
+            color: #ffffff;
+            overflow: hidden;
+        }
+        .font-orbitron {
+            font-family: 'Orbitron', sans-serif;
+        }
+        /* Glassmorphism styling */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        .glass-btn {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+        .glass-btn:active, .glass-btn.active {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            border-color: #60a5fa;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.6);
+        }
+        /* Animated timing gauge */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+        .pulse-hit {
+            animation: pulse-ring 1s infinite ease-in-out;
+        }
+        /* Dynamic broadcast popup banner */
+        .broadcast-banner {
+            text-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between items-center relative overflow-hidden bg-slate-950">
+
+    <!-- 3D Canvas Viewport -->
+    <div id="canvasContainer" class="absolute inset-0 w-full h-full z-0"></div>
+
+    <!-- BROADCAST OVERLAY HEADER -->
+    <header id="hudHeader" class="relative z-10 w-full max-w-4xl pt-2 px-3 flex flex-col gap-1 pointer-events-none hidden">
+        <div class="flex justify-between items-center glass-panel rounded-2xl p-2.5 px-4 shadow-2xl border border-slate-700/50">
+            <!-- Team vs Team Scoreboard -->
+            <div class="flex items-center gap-3">
+                <div class="flex flex-col">
+                    <span id="hudMatchTitle" class="text-[10px] text-cyan-400 font-extrabold uppercase tracking-widest font-orbitron">T20 WORLD CUP</span>
+                    <div class="flex items-center gap-2">
+                        <span id="hudUserTeamFlag" class="text-xl">🇧🇩</span>
+                        <span id="hudUserTeamName" class="font-black text-lg text-white font-orbitron">BAN</span>
+                        <span class="text-xs text-slate-400 font-bold">vs</span>
+                        <span id="hudOpponentTeamName" class="font-bold text-sm text-slate-300 font-orbitron">IND</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Score & Overs -->
+            <div class="text-center">
+                <div class="flex items-baseline justify-center gap-1">
+                    <span id="hudScore" class="text-2xl md:text-3xl font-black text-amber-400 font-orbitron tracking-tight">0/0</span>
+                    <span id="hudOvers" class="text-xs text-slate-300 font-bold">(0.0/2)</span>
+                </div>
+                <div id="hudTargetText" class="text-[11px] font-bold text-emerald-400">Target: 25 Runs in 12 Balls</div>
+            </div>
+
+            <!-- Match Stats Info -->
+            <div class="flex items-center gap-2 text-right">
+                <div class="flex flex-col">
+                    <span class="text-[10px] text-slate-400 uppercase font-bold">CURRENT BATTER</span>
+                    <span id="hudBatterName" class="text-xs font-bold text-cyan-300 truncate max-w-[100px]">Shakib Al Hasan</span>
+                </div>
+                <button onclick="toggleAudioLanguage()" class="pointer-events-auto bg-slate-800/80 hover:bg-slate-700 p-2 rounded-xl border border-slate-600 text-xs text-yellow-400 font-bold flex items-center gap-1 shadow">
+                    <i class="fa-solid fa-volume-high"></i>
+                    <span id="langLabel">ENG</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Dynamic Broadcast Commentary Popup Banner -->
+        <div class="w-full flex justify-center">
+            <div id="broadcastBanner" class="broadcast-banner glass-panel bg-slate-900/90 text-yellow-400 border-yellow-500/40 px-6 py-1.5 rounded-full text-xs font-black tracking-widest font-orbitron shadow-2xl transition-all duration-300 transform scale-0 uppercase text-center">
+                WELCOME TO 3D WORLD CRICKET CHAMPIONSHIP!
+            </div>
+        </div>
+    </header>
+
+    <!-- TIMING & POWER GAUGE (Visible during delivery) -->
+    <div id="timingContainer" class="absolute bottom-32 md:bottom-28 z-10 w-64 flex flex-col items-center gap-1 transition-all duration-200 opacity-0 pointer-events-none">
+        <div class="text-[11px] font-black text-cyan-400 tracking-wider uppercase font-orbitron flex items-center gap-1">
+            <i class="fa-solid fa-gauge-high"></i> TIMING & POWER
+        </div>
+        <div class="w-full h-4 bg-slate-900 rounded-full border border-slate-700 p-0.5 relative overflow-hidden shadow-inner">
+            <!-- Colored Zones -->
+            <div class="absolute inset-y-0 left-0 w-1/4 bg-red-600/60"></div>
+            <div class="absolute inset-y-0 left-1/4 w-1/4 bg-yellow-500/60"></div>
+            <div class="absolute inset-y-0 left-2/4 w-1/4 bg-emerald-500/80"></div>
+            <div class="absolute inset-y-0 left-3/4 w-1/4 bg-red-600/60"></div>
+            <!-- Animated Needle Indicator -->
+            <div id="timingNeedle" class="absolute top-0 bottom-0 w-2 bg-white rounded-full shadow-[0_0_10px_#fff] transition-all duration-75 left-0"></div>
+        </div>
+        <span id="timingFeedbackText" class="text-xs font-black text-white font-orbitron tracking-widest drop-shadow">READY!</span>
+    </div>
+
+    <!-- TOUCH & KEYBOARD CONTROLS HUD (FOR MOBILE & DESKTOP) -->
+    <footer id="hudControls" class="relative z-10 w-full max-w-3xl p-3 pb-5 flex flex-col gap-2.5 pointer-events-auto hidden">
+        <!-- Shot Type Selector Buttons -->
+        <div class="grid grid-cols-4 gap-1.5 md:gap-2">
+            <button onclick="selectShotType('drive')" id="btnDrive" class="glass-btn active rounded-xl p-2 text-center text-xs font-bold text-cyan-300 flex flex-col items-center justify-center transition">
+                <i class="fa-solid fa-baseball text-sm mb-0.5"></i> DRIVE
+            </button>
+            <button onclick="selectShotType('loft')" id="btnLoft" class="glass-btn rounded-xl p-2 text-center text-xs font-bold text-amber-300 flex flex-col items-center justify-center transition">
+                <i class="fa-solid fa-rocket text-sm mb-0.5"></i> LOFTED
+            </button>
+            <button onclick="selectShotType('helicopter')" id="btnHelicopter" class="glass-btn rounded-xl p-2 text-center text-xs font-bold text-purple-300 flex flex-col items-center justify-center transition">
+                <i class="fa-solid fa-fan text-sm mb-0.5"></i> HELICOPTER
+            </button>
+            <button onclick="selectShotType('uppercut')" id="btnUppercut" class="glass-btn rounded-xl p-2 text-center text-xs font-bold text-emerald-300 flex flex-col items-center justify-center transition">
+                <i class="fa-solid fa-angles-up text-sm mb-0.5"></i> UPPER CUT
+            </button>
+        </div>
+
+        <!-- Main Controller Row -->
+        <div class="flex items-center justify-between gap-3">
+            <!-- Left Side: Interactive Direction Joystick for Mobile -->
+            <div class="relative w-28 h-28 md:w-32 md:h-32 flex items-center justify-center">
+                <div id="joystickZone" class="w-full h-full rounded-full border-2 border-cyan-500/40 bg-slate-900/60 flex items-center justify-center relative shadow-inner">
+                    <span class="text-[9px] text-cyan-400 font-bold uppercase tracking-wider absolute top-2 pointer-events-none">OFF SIDE</span>
+                    <span class="text-[9px] text-cyan-400 font-bold uppercase tracking-wider absolute bottom-2 pointer-events-none">LEG SIDE</span>
+                    <span class="text-[9px] text-slate-400 font-bold uppercase absolute center pointer-events-none">AIM SHOT</span>
+                </div>
+            </div>
+
+            <!-- Center Info / Keyboard Hints for PC -->
+            <div class="hidden md:flex flex-col items-center text-slate-400 text-[11px] font-semibold gap-1 glass-panel p-2 rounded-xl border border-slate-700/40">
+                <div><span class="text-cyan-400 font-bold">WASD / Arrow Keys:</span> Aim Shot</div>
+                <div><span class="text-amber-400 font-bold">SPACEBAR:</span> Hit Shot</div>
+                <div><span class="text-emerald-400 font-bold">SHIFT + SPACE:</span> Loft Shot</div>
+            </div>
+
+            <!-- Right Side: Action Trigger Hit Button -->
+            <div class="flex-1 max-w-xs flex flex-col gap-1">
+                <button id="btnHitAction" onclick="handleHitAction()" class="w-full bg-gradient-to-r from-emerald-500 via-green-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black py-4 px-6 rounded-2xl shadow-[0_0_25px_rgba(34,197,94,0.5)] border-b-4 border-emerald-800 active:border-b-0 active:translate-y-1 transition text-base uppercase tracking-wider font-orbitron flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-baseball-bat-ball text-xl"></i>
+                    <span id="hitBtnLabel">START BOWL</span>
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <!-- MAIN START & TEAM SQUAD SELECTION MODAL SCREEN -->
+    <div id="modalTeamSelect" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-3 md:p-6 overflow-y-auto">
+        <div class="bg-slate-900/90 border border-cyan-500/30 rounded-3xl p-5 md:p-8 max-w-xl w-full shadow-[0_0_50px_rgba(6,182,212,0.25)] flex flex-col gap-5">
+            <!-- Modal Header -->
+            <div class="text-center">
+                <span class="text-xs font-black text-cyan-400 uppercase tracking-widest font-orbitron">3D World Championship</span>
+                <h2 class="text-2xl md:text-3xl font-black text-white font-orbitron">SELECT YOUR TEAM</h2>
+                <p class="text-xs text-slate-400 mt-1">Choose international team & playing XI strike batter to enter stadium</p>
+            </div>
+
+            <!-- Team Flags Grid -->
+            <div class="grid grid-cols-5 gap-2 md:gap-3" id="teamGrid">
+                <!-- Javascript populated -->
+            </div>
+
+            <!-- Squad Playing XI Info Card -->
+            <div class="glass-panel p-4 rounded-2xl border border-slate-700 flex flex-col gap-2">
+                <div class="flex justify-between items-center border-b border-slate-700/60 pb-2">
+                    <h3 id="selectedTeamTitle" class="font-bold text-sm text-yellow-400 font-orbitron">BANGLADESH SQUAD</h3>
+                    <span class="text-[11px] bg-slate-800 text-cyan-300 font-bold px-2 py-0.5 rounded-full">T20 Playing XI</span>
+                </div>
+                
+                <div class="text-xs text-slate-300 font-bold mt-1">Select Strike Batter:</div>
+                <div id="squadList" class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-36 overflow-y-auto pr-1">
+                    <!-- Javascript populated playing XI -->
+                </div>
+            </div>
+
+            <!-- Over Match Duration Settings -->
+            <div class="flex justify-between items-center bg-slate-800/60 p-3 rounded-2xl border border-slate-700">
+                <div class="text-xs font-bold text-slate-300">MATCH DURATION:</div>
+                <div class="flex gap-2">
+                    <button onclick="setMatchOvers(2)" id="ov2" class="px-3 py-1 bg-cyan-600 text-white rounded-lg text-xs font-bold font-orbitron shadow">2 OVERS</button>
+                    <button onclick="setMatchOvers(5)" id="ov5" class="px-3 py-1 bg-slate-700 text-slate-300 rounded-lg text-xs font-bold font-orbitron">5 OVERS</button>
+                </div>
+            </div>
+
+            <!-- Start Match Action Button -->
+            <button onclick="startGameEngine()" class="w-full bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-black py-4 rounded-2xl shadow-[0_0_30px_rgba(6,182,212,0.4)] font-orbitron uppercase text-base tracking-widest transition transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2">
+                <i class="fa-solid fa-trophy"></i> ENTER STADIUM & PLAY
+            </button>
+        </div>
+    </div>
+
+    <!-- GAME OVER / MATCH SUMMARY MODAL -->
+    <div id="modalMatchResult" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border-2 border-amber-500/40 rounded-3xl p-6 md:p-8 max-w-md w-full text-center shadow-[0_0_50px_rgba(245,158,11,0.3)] flex flex-col items-center gap-4">
+            <div id="resIcon" class="text-5xl text-yellow-400">
+                <i class="fa-solid fa-trophy"></i>
+            </div>
+            <div>
+                <h2 id="resTitle" class="text-2xl font-black text-white font-orbitron uppercase">VICTORY FOR BANGLADESH!</h2>
+                <p id="resDesc" class="text-xs text-slate-300 mt-2">Sensational batting performance in the 3D World Championship finals!</p>
+            </div>
+            <div class="w-full glass-panel p-4 rounded-2xl border border-slate-700 flex justify-around text-center">
+                <div>
+                    <span class="text-[10px] text-slate-400 font-bold uppercase">FINAL SCORE</span>
+                    <p id="resScore" class="text-lg font-black text-amber-400 font-orbitron">28/1 (2.0)</p>
+                </div>
+                <div class="border-r border-slate-700"></div>
+                <div>
+                    <span class="text-[10px] text-slate-400 font-bold uppercase">TARGET</span>
+                    <p id="resTarget" class="text-lg font-black text-cyan-400 font-orbitron">25</p>
+                </div>
+            </div>
+            <button onclick="restartGameToMenu()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold py-3.5 rounded-xl shadow-lg transition uppercase tracking-wider text-xs font-orbitron">
+                PLAY ANOTHER MATCH
+            </button>
+        </div>
+    </div>
+
+    <!-- MAIN THREE.JS 3D ENGINE & GAME LOGIC SCRIPT -->
+    <script>
+        /* ====================================================================
+           INTERNATIONAL TEAMS & SQUAD DATA
+           ==================================================================== */
+        const TEAMS_DATA = {
+            BAN: {
+                name: "Bangladesh",
+                flag: "🇧🇩",
+                color: "#006a4e",
+                squad: [
+                    { name: "Shakib Al Hasan", style: "LHB / All-Rounder", rating: 92, shot: "Helicopter" },
+                    { name: "Litton Das", style: "RHB / Wicket-Keeper", rating: 88, shot: "Upper Cut" },
+                    { name: "Tawhid Hridoy", style: "RHB / Aggressive", rating: 86, shot: "Lofted Drive" },
+                    { name: "Mustafizur Rahman", style: "LHB / Pace Bowler", rating: 89, shot: "Defensive Drive" }
+                ]
+            },
+            IND: {
+                name: "India",
+                flag: "🇮🇳",
+                color: "#138808",
+                squad: [
+                    { name: "Virat Kohli", style: "RHB / Anchor", rating: 95, shot: "Cover Drive" },
+                    { name: "Rohit Sharma", style: "RHB / Power Hitter", rating: 94, shot: "Pull Shot" },
+                    { name: "Suryakumar Yadav", style: "RHB / 360 Hitter", rating: 93, shot: "Scoop Shot" },
+                    { name: "Jasprit Bumrah", style: "RHB / Pace Bowler", rating: 96, shot: "Lofted Drive" }
+                ]
+            },
+            AUS: {
+                name: "Australia",
+                flag: "🇦🇺",
+                color: "#ffcd00",
+                squad: [
+                    { name: "Travis Head", style: "LHB / Aggressive", rating: 91, shot: "Upper Cut" },
+                    { name: "Glenn Maxwell", style: "RHB / Power Hitter", rating: 92, shot: "Reverse Sweep" },
+                    { name: "Mitchell Starc", style: "LHB / Pace Bowler", rating: 90, shot: "Slog Sweep" }
+                ]
+            },
+            PAK: {
+                name: "Pakistan",
+                flag: "🇵🇰",
+                color: "#115740",
+                squad: [
+                    { name: "Babar Azam", style: "RHB / Anchor", rating: 91, shot: "Cover Drive" },
+                    { name: "Mohammad Rizwan", style: "RHB / Keeper", rating: 89, shot: "Sweep Shot" },
+                    { name: "Shaheen Afridi", style: "LHB / Pace Bowler", rating: 92, shot: "Lofted Loft" }
+                ]
+            },
+            ENG: {
+                name: "England",
+                flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
+                color: "#ce1124",
+                squad: [
+                    { name: "Jos Buttler", style: "RHB / Power Hitter", rating: 92, shot: "Scoop" },
+                    { name: "Liam Livingstone", style: "RHB / Hard Hitter", rating: 88, shot: "Monster Six" }
+                ]
+            }
+        };
+
+        // Game Configuration & Global State
+        let selectedUserTeamKey = "BAN";
+        let selectedOpponentKey = "IND";
+        let selectedBatterIndex = 0;
+        let matchTotalOvers = 5;
+        let totalAllowedBalls = 30;
+
+        let matchScore = 0;
+        let matchWickets = 0;
+        let ballsBowledCount = 0;
+        let targetRuns = 45;
+
+        let currentShotType = 'drive'; // drive, loft, helicopter, uppercut
+        let shotAngleX = 0; // -1 (Left Offside) to +1 (Right Legside)
+        let isAudioBengali = false;
+
+        let gameState = 'MENU'; // MENU, READY_BOWL, BOWLING, BALL_IN_FLIGHT, SHOT_HIT, COMPLETED
+
+        /* ====================================================================
+           WEB AUDIO API - REALISTIC CRICKET SFX GENERATOR
+           ==================================================================== */
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playCricketSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const now = audioCtx.currentTime;
+
+            if (type === 'bat_hit') {
+                // Wooden bat strike crack
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(220, now);
+                osc.frequency.exponentialRampToValueAtTime(80, now + 0.12);
+                gain.gain.setValueAtTime(0.8, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.12);
+            } else if (type === 'stump_clatter') {
+                // Wicket bails hit sound
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(450, now);
+                osc.frequency.linearRampToValueAtTime(60, now + 0.25);
+                gain.gain.setValueAtTime(0.9, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            } else if (type === 'crowd_cheer') {
+                // Stadium crowd cheer swell
+                const bufferSize = audioCtx.sampleRate * 1.5;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                const noise = audioCtx.createBufferSource();
+                noise.buffer = buffer;
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.setValueAtTime(800, now);
+                const gain = audioCtx.createGain();
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0.5, now + 0.3);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 1.4);
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(audioCtx.destination);
+                noise.start(now);
+            }
+        }
+
+        /* ====================================================================
+           WEB SPEECH API VOICE COMMENTARY SYSTEM (Bengali & English)
+           ==================================================================== */
+        function speakCommentary(textEng, textBng) {
+            if (!('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel(); // Stop prior audio
+
+            const textToSpeak = isAudioBengali ? textBng : textEng;
+            const utterance = new SpeechSynthesisUtterance(textToSpeak);
+            utterance.rate = 1.05;
+            utterance.pitch = 1.1;
+
+            if (isAudioBengali) {
+                utterance.lang = 'bn-BD';
+            } else {
+                utterance.lang = 'en-US';
+            }
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function toggleAudioLanguage() {
+            isAudioBengali = !isAudioBengali;
+            document.getElementById('langLabel').innerText = isAudioBengali ? 'BNG' : 'ENG';
+            updateBroadcastBanner(isAudioBengali ? "ধারাভাষ্য বাংলায় সেট করা হয়েছে" : "Commentary set to English");
+        }
+
+        /* ====================================================================
+           THREE.JS 3D ENGINE INITIALIZATION & STADIUM SCENE SETUP
+           ==================================================================== */
+        let scene, camera, renderer;
+        let pitchMesh, bowlerGroup, batsmanGroup, ballMesh, stumpsGroup;
+        let fieldersList = [];
+        let crowdSpectatorsList = [];
+        let fireworksParticles = [];
+
+        let pitchLandingMarker; // 3D Pitch Landing Spot Circle
+        let ballVelocity = new THREE.Vector3();
+        let isBallInFlight = false;
+        let animationFrameId;
+
+        function init3DScene() {
+            const container = document.getElementById('canvasContainer');
+            container.innerHTML = '';
+
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a1128);
+            scene.fog = new THREE.FogExp2(0x0a1128, 0.008);
+
+            // Camera setup (Broadcast perspective behind batsman)
+            camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 28);
+            camera.lookAt(0, 1.5, -5);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // Lighting Setup
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+            scene.add(ambientLight);
+
+            const sunLight = new THREE.DirectionalLight(0xfff5ea, 1.2);
+            sunLight.position.set(20, 40, 20);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 1024;
+            sunLight.shadow.mapSize.height = 1024;
+            scene.add(sunLight);
+
+            // Stadium Floodlights
+            createStadiumFloodlights();
+
+            // Build Stadium, Grass Pitch, Animated Crowd Spectators
+            buildStadiumArchitecture();
+            buildPitchAndCreases();
+            build3DStumps();
+            build3DPlayers();
+            buildPitchLandingMarker();
+
+            // Window Resize handler
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        /* Create Multi-tier Stadium Architecture & Animated Spectators */
+        function buildStadiumArchitecture() {
+            // Outfield Circular Grass Ground
+            const groundGeo = new THREE.CylinderGeometry(85, 85, 0.5, 64);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.8 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.position.y = -0.25;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Boundary Rope Ring
+            const ropeGeo = new THREE.TorusGeometry(65, 0.4, 8, 64);
+            const ropeMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc });
+            const rope = new THREE.Mesh(ropeGeo, ropeMat);
+            rope.rotation.x = Math.PI / 2;
+            rope.position.y = 0.1;
+            scene.add(rope);
+
+            // Grandstand Circular Seating Tiers & Animated Crowd
+            const standGeo = new THREE.CylinderGeometry(95, 75, 18, 48, 1, true);
+            const standMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, side: THREE.DoubleSide });
+            const stand = new THREE.Mesh(standGeo, standMat);
+            stand.position.y = 8;
+            scene.add(stand);
+
+            // Populate Animated Spectators (Thousands as 3D instanced geometry particles)
+            const crowdGeo = new THREE.BoxGeometry(0.5, 0.7, 0.5);
+            const crowdColors = [0xef4444, 0x3b82f6, 0xeab308, 0x10b981, 0xf8fafc, 0xa855f7];
+            
+            for (let i = 0; i < 350; i++) {
+                const angle = (i / 350) * Math.PI * 2;
+                const radius = 72 + Math.random() * 15;
+                const height = 1 + (radius - 70) * 0.4;
+
+                const color = crowdColors[Math.floor(Math.random() * crowdColors.length)];
+                const crowdMat = new THREE.MeshBasicMaterial({ color: color });
+                const spectator = new THREE.Mesh(crowdGeo, crowdMat);
+
+                spectator.position.set(Math.cos(angle) * radius, height, Math.sin(angle) * radius);
+                spectator.userData = { initialY: height, phase: Math.random() * Math.PI * 2 };
+                scene.add(spectator);
+                crowdSpectatorsList.push(spectator);
+            }
+        }
+
+        function createStadiumFloodlights() {
+            const towerPositions = [
+                [-60, 40, -60], [60, 40, -60], [-60, 40, 60], [60, 40, 60]
+            ];
+            towerPositions.forEach(pos => {
+                const light = new THREE.PointLight(0x38bdf8, 0.8, 120);
+                light.position.set(pos[0], pos[1], pos[2]);
+                scene.add(light);
+
+                // Metallic Pole
+                const poleGeo = new THREE.CylinderGeometry(0.5, 0.8, 40);
+                const poleMat = new THREE.MeshStandardMaterial({ color: 0x475569 });
+                const pole = new THREE.Mesh(poleGeo, poleMat);
+                pole.position.set(pos[0], 20, pos[2]);
+                scene.add(pole);
+            });
+        }
+
+        /* Build High Quality 22-Yard Rectangular Dirt Pitch */
+        function buildPitchAndCreases() {
+            const pitchGeo = new THREE.BoxGeometry(6, 0.1, 24); // 22 yards length
+            const pitchMat = new THREE.MeshStandardMaterial({ color: 0xca8a04, roughness: 0.9 });
+            pitchMesh = new THREE.Mesh(pitchGeo, pitchMat);
+            pitchMesh.position.set(0, 0, 0);
+            pitchMesh.receiveShadow = true;
+            scene.add(pitchMesh);
+
+            // Crease Markings (White Lines)
+            const creaseMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            
+            // Batting Crease (Z = 9)
+            const batCrease = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.12, 0.15), creaseMat);
+            batCrease.position.set(0, 0.02, 9);
+            scene.add(batCrease);
+
+            // Bowling Crease (Z = -9)
+            const bowlCrease = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.12, 0.15), creaseMat);
+            bowlCrease.position.set(0, 0.02, -9);
+            scene.add(bowlCrease);
+        }
+
+        /* Build 3D Wicket Stumps & Bails */
+        function build3DStumps() {
+            stumpsGroup = new THREE.Group();
+            const stumpMat = new THREE.MeshStandardMaterial({ color: 0xfef08a });
+            const bailMat = new THREE.MeshStandardMaterial({ color: 0xd97706 });
+
+            // 3 Stumps
+            [-0.35, 0, 0.35].forEach(xOffset => {
+                const stump = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.4), stumpMat);
+                stump.position.set(xOffset, 0.7, 9.8);
+                stump.castShadow = true;
+                stumpsGroup.add(stump);
+            });
+
+            // 2 Bails on top
+            const bail1 = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.05, 0.06), bailMat);
+            bail1.position.set(-0.18, 1.42, 9.8);
+            const bail2 = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.05, 0.06), bailMat);
+            bail2.position.set(0.18, 1.42, 9.8);
+            stumpsGroup.add(bail1);
+            stumpsGroup.add(bail2);
+
+            scene.add(stumpsGroup);
+        }
+
+        /* Build 3D Player Models (Batsman, Bowler, Ball, Fielders) */
+        function build3DPlayers() {
+            // BATSMAN MODEL
+            batsmanGroup = new THREE.Group();
+            
+            // Body Torso
+            const bodyGeo = new THREE.CylinderGeometry(0.4, 0.35, 1.4);
+            const teamMat = new THREE.MeshStandardMaterial({ color: TEAMS_DATA[selectedUserTeamKey].color });
+            const body = new THREE.Mesh(bodyGeo, teamMat);
+            body.position.y = 1.2;
+            body.castShadow = true;
+            batsmanGroup.add(body);
+
+            // Head & Helmet
+            const headGeo = new THREE.SphereGeometry(0.25, 16, 16);
+            const helmetMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a });
+            const head = new THREE.Mesh(headGeo, helmetMat);
+            head.position.y = 2.1;
+            batsmanGroup.add(head);
+
+            // Wooden Bat
+            const batGeo = new THREE.BoxGeometry(0.12, 1.3, 0.25);
+            const batMat = new THREE.MeshStandardMaterial({ color: 0xb45309 });
+            const bat = new THREE.Mesh(batGeo, batMat);
+            bat.position.set(0.4, 1.0, -0.2);
+            bat.rotation.z = -0.3;
+            bat.name = "CRICKET_BAT";
+            batsmanGroup.add(bat);
+
+            batsmanGroup.position.set(0, 0, 9.2); // At batting crease
+            scene.add(batsmanGroup);
+
+            // BOWLER MODEL
+            bowlerGroup = new THREE.Group();
+            const oppTeamMat = new THREE.MeshStandardMaterial({ color: TEAMS_DATA[selectedOpponentKey].color });
+            const bBody = new THREE.Mesh(bodyGeo, oppTeamMat);
+            bBody.position.y = 1.2;
+            bBody.castShadow = true;
+            bowlerGroup.add(bBody);
+
+            const bHead = new THREE.Mesh(headGeo, oppTeamMat);
+            bHead.position.y = 2.1;
+            bowlerGroup.add(bHead);
+
+            bowlerGroup.position.set(0, 0, -22); // Starting run-up 20 yards back
+            scene.add(bowlerGroup);
+
+            // CRICKET BALL MESH
+            const ballGeo = new THREE.SphereGeometry(0.12, 16, 16);
+            const ballMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.3 });
+            ballMesh = new THREE.Mesh(ballGeo, ballMat);
+            ballMesh.position.set(0, 1.2, -22);
+            ballMesh.castShadow = true;
+            scene.add(ballMesh);
+
+            // 3D FIELDERS AI (Positioned around field)
+            const fielderPositions = [
+                [-15, 0, 5],   // Point
+                [-25, 0, -15],  // Cover
+                [-8, 0, -35],   // Mid-off
+                [8, 0, -35],    // Mid-on
+                [22, 0, -10],   // Mid-wicket
+                [35, 0, 15],    // Deep Square Leg
+                [2, 0, 12]      // Wicketkeeper
+            ];
+
+            fieldersList = [];
+            fielderPositions.forEach(pos => {
+                const fielder = new THREE.Group();
+                const fBody = new THREE.Mesh(bodyGeo, oppTeamMat);
+                fBody.position.y = 1.2;
+                fBody.castShadow = true;
+                fielder.add(fBody);
+
+                const fHead = new THREE.Mesh(headGeo, oppTeamMat);
+                fHead.position.y = 2.1;
+                fielder.add(fHead);
+
+                fielder.position.set(pos[0], pos[1], pos[2]);
+                scene.add(fielder);
+                fieldersList.push(fielder);
+            });
+        }
+
+        /* Build Dynamic Pitch Landing Indicator Ring */
+        function buildPitchLandingMarker() {
+            const ringGeo = new THREE.RingGeometry(0.2, 0.5, 32);
+            const ringMat = new THREE.MeshBasicMaterial({ color: 0xfacc15, side: THREE.DoubleSide });
+            pitchLandingMarker = new THREE.Mesh(ringGeo, ringMat);
+            pitchLandingMarker.rotation.x = Math.PI / 2;
+            pitchLandingMarker.position.set(0, 0.06, 2); // Pitching spot
+            pitchLandingMarker.visible = false;
+            scene.add(pitchLandingMarker);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        /* ====================================================================
+           GAME ENGINE MECHANICS, ANIMATIONS & PHYSICS LOOP
+           ==================================================================== */
+        let timingGaugeProgress = 0;
+        let timingGaugeDirection = 1;
+
+        function startMatchDelivery() {
+            if (gameState === 'BOWLING' || gameState === 'BALL_IN_FLIGHT') return;
+
+            if (ballsBowledCount >= totalAllowedBalls || matchWickets >= 2 || matchScore >= targetRuns) {
+                evaluateMatchEnd();
+                return;
+            }
+
+            gameState = 'BOWLING';
+            updateBroadcastBanner("BOWLER IS RUNNING UP...");
+            speakCommentary("Bowler starts his run up.", "বোলার বোলিং করার জন্য দৌড়ে আসছেন।");
+
+            // Reset positions
+            bowlerGroup.position.set(0, 0, -22);
+            ballMesh.position.set(0, 1.2, -22);
+            pitchLandingMarker.visible = true;
+
+            // Random pitch landing target on 22 yards
+            const randomPitchX = (Math.random() - 0.5) * 2.2;
+            const randomPitchZ = 1.5 + Math.random() * 2.5; // Good length area
+            pitchLandingMarker.position.set(randomPitchX, 0.06, randomPitchZ);
+
+            document.getElementById('hitBtnLabel').innerText = "PLAY SHOT!";
+            document.getElementById('timingContainer').style.opacity = '1';
+        }
+
+        function triggerBattingShot() {
+            if (gameState !== 'BOWLING' && gameState !== 'BALL_IN_FLIGHT') return;
+
+            const batMesh = batsmanGroup.getObjectByName("CRICKET_BAT");
+            if (batMesh) {
+                batMesh.rotation.x = -1.2; // Bat swing motion
+                setTimeout(() => { batMesh.rotation.x = 0; }, 300);
+            }
+
+            // Calculate timing precision using gauge
+            const needlePos = timingGaugeProgress; // 0 to 1
+            let timingQuality = 'LATE';
+
+            if (needlePos >= 0.45 && needlePos <= 0.65) {
+                timingQuality = 'PERFECT';
+            } else if (needlePos >= 0.3 && needlePos <= 0.8) {
+                timingQuality = 'GOOD';
+            }
+
+            document.getElementById('timingFeedbackText').innerText = timingQuality;
+
+            if (timingQuality === 'PERFECT') {
+                playCricketSound('bat_hit');
+                playCricketSound('crowd_cheer');
+                gameState = 'SHOT_HIT';
+
+                let runsScored = 4;
+                if (currentShotType === 'loft' || currentShotType === 'helicopter') runsScored = 6;
+                if (currentShotType === 'uppercut') runsScored = 4;
+
+                // Set Ball Trajectory Velocity
+                const directionX = shotAngleX * 1.8;
+                const directionY = (currentShotType === 'loft' || currentShotType === 'helicopter') ? 1.2 : 0.4;
+                ballVelocity.set(directionX, directionY, -1.8);
+
+                matchScore += runsScored;
+                ballsBowledCount++;
+                triggerFireworks();
+
+                const announceEng = `${runsScored} RUNS! Sensational hit over ${shotAngleX < 0 ? 'Offside' : 'Legside'}!`;
+                const announceBng = `চমৎকার শট! ${runsScored} রান পাওয়া গেল!`;
+                updateBroadcastBanner(`💥 ${runsScored} RUNS SCORED!`);
+                speakCommentary(announceEng, announceBng);
+
+            } else if (timingQuality === 'GOOD') {
+                playCricketSound('bat_hit');
+                gameState = 'SHOT_HIT';
+                const runsScored = Math.random() > 0.5 ? 2 : 1;
+
+                ballVelocity.set(shotAngleX * 1.0, 0.2, -1.0);
+                matchScore += runsScored;
+                ballsBowledCount++;
+
+                updateBroadcastBanner(`👍 ${runsScored} RUN(S) TAKEN`);
+                speakCommentary(`Pushed into the gap for ${runsScored} run.`, `গ্যাপে ঠেলে দিয়ে ${runsScored} রান নিলেন।`);
+            } else {
+                // MISS / WICKET
+                playCricketSound('stump_clatter');
+                gameState = 'COMPLETED';
+                matchWickets += 1;
+                ballsBowledCount++;
+
+                updateBroadcastBanner("⚡ OUT! CLEAN BOWLED!");
+                speakCommentary("He's missed it completely! Clean bowled!", "দারুণ বল! বোল্ড আউট হয়ে গেলেন ব্যাটসম্যান!");
+            }
+
+            updateHUDScoreboard();
+            setTimeout(resetDeliveryState, 2500);
+        }
+
+        function resetDeliveryState() {
+            gameState = 'READY_BOWL';
+            pitchLandingMarker.visible = false;
+            document.getElementById('hitBtnLabel').innerText = "NEXT BALL";
+            document.getElementById('timingContainer').style.opacity = '0';
+
+            if (ballsBowledCount >= totalAllowedBalls || matchWickets >= 2 || matchScore >= targetRuns) {
+                evaluateMatchEnd();
+            }
+        }
+
+        /* Dynamic Firework Cannon Particles for 4s and 6s */
+        function triggerFireworks() {
+            for (let i = 0; i < 40; i++) {
+                const pGeo = new THREE.SphereGeometry(0.15, 8, 8);
+                const pMat = new THREE.MeshBasicMaterial({ color: Math.random() * 0xffffff });
+                const particle = new THREE.Mesh(pGeo, pMat);
+                particle.position.set((Math.random() - 0.5) * 10, 2, 8);
+                particle.userData = {
+                    vx: (Math.random() - 0.5) * 0.8,
+                    vy: Math.random() * 0.8 + 0.4,
+                    vz: (Math.random() - 0.5) * 0.8,
+                    life: 1.0
+                };
+                scene.add(particle);
+                fireworksParticles.push(particle);
+            }
+        }
+
+        /* Global Animation & Physics Render Loop */
+        function animateLoop() {
+            animationFrameId = requestAnimationFrame(animateLoop);
+
+            // 1. Bowler Run-up Animation
+            if (gameState === 'BOWLING') {
+                if (bowlerGroup.position.z < -9) {
+                    bowlerGroup.position.z += 0.35; // Run towards crease
+                    ballMesh.position.z = bowlerGroup.position.z;
+                } else {
+                    // Release ball towards target landing spot
+                    gameState = 'BALL_IN_FLIGHT';
+                    const targetX = pitchLandingMarker.position.x;
+                    const targetZ = pitchLandingMarker.position.z;
+
+                    ballVelocity.set(
+                        (targetX - ballMesh.position.x) * 0.08,
+                        -0.1,
+                        (targetZ - ballMesh.position.z) * 0.08
+                    );
+                }
+            }
+
+            // 2. Ball Flight Physics
+            if (gameState === 'BALL_IN_FLIGHT') {
+                ballMesh.position.add(ballVelocity);
+                // Gravity & Bounce at pitch
+                if (ballMesh.position.y <= 0.15 && ballMesh.position.z < 8) {
+                    ballVelocity.y = 0.25; // Bounce up towards batsman
+                }
+            } else if (gameState === 'SHOT_HIT') {
+                ballMesh.position.add(ballVelocity);
+                ballVelocity.y -= 0.015; // Gravity
+                if (ballMesh.position.y <= 0.12) ballVelocity.y = 0;
+
+                // Active Fielders run toward ball
+                fieldersList.forEach(fielder => {
+                    const distToBall = fielder.position.distanceTo(ballMesh.position);
+                    if (distToBall < 25 && distToBall > 1.5) {
+                        fielder.lookAt(ballMesh.position.x, 0, ballMesh.position.z);
+                        fielder.translateZ(0.15);
+                    }
+                });
+            }
+
+            // 3. Timing Gauge Oscillator
+            if (gameState === 'BOWLING' || gameState === 'BALL_IN_FLIGHT') {
+                timingGaugeProgress += 0.03 * timingGaugeDirection;
+                if (timingGaugeProgress >= 1) timingGaugeDirection = -1;
+                if (timingGaugeProgress <= 0) timingGaugeDirection = 1;
+                document.getElementById('timingNeedle').style.left = `${timingGaugeProgress * 100}%`;
+            }
+
+            // 4. Animated Crowd Spectators Wave Jump
+            crowdSpectatorsList.forEach(s => {
+                s.position.y = s.userData.initialY + Math.sin(Date.now() * 0.005 + s.userData.phase) * 0.2;
+            });
+
+            // 5. Update Fireworks Particles
+            for (let i = fireworksParticles.length - 1; i >= 0; i--) {
+                const p = fireworksParticles[i];
+                p.position.x += p.userData.vx;
+                p.position.y += p.userData.vy;
+                p.position.z += p.userData.vz;
+                p.userData.life -= 0.02;
+                if (p.userData.life <= 0) {
+                    scene.remove(p);
+                    fireworksParticles.splice(i, 1);
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        /* ====================================================================
+           UI & USER CONTROLS HANDLERS
+           ==================================================================== */
+        function selectShotType(type) {
+            currentShotType = type;
+            document.querySelectorAll('.glass-btn').forEach(btn => btn.classList.remove('active'));
+            const activeBtn = document.getElementById(`btn${type.charAt(0).toUpperCase() + type.slice(1)}`);
+            if (activeBtn) activeBtn.classList.add('active');
+            updateBroadcastBanner(`SHOT SELECTED: ${type.toUpperCase()}`);
+        }
+
+        function handleHitAction() {
+            if (gameState === 'READY_BOWL' || gameState === 'MENU' || gameState === 'COMPLETED') {
+                startMatchDelivery();
+            } else if (gameState === 'BOWLING' || gameState === 'BALL_IN_FLIGHT') {
+                triggerBattingShot();
+            }
+        }
+
+        function updateBroadcastBanner(msg) {
+            const banner = document.getElementById('broadcastBanner');
+            banner.innerText = msg;
+            banner.classList.remove('scale-0');
+            banner.classList.add('scale-100');
+        }
+
+        function updateHUDScoreboard() {
+            document.getElementById('hudScore').innerText = `${matchScore}/${matchWickets}`;
+            const oversDone = Math.floor(ballsBowledCount / 6);
+            const remainderBalls = ballsBowledCount % 6;
+            document.getElementById('hudOvers').innerText = `(${oversDone}.${remainderBalls}/${matchTotalOvers})`;
+        }
+
+        /* Setup Touch Nipple Joystick for Mobile Aiming */
+        function initMobileJoystick() {
+            const container = document.getElementById('joystickZone');
+            const manager = nipplejs.create({
+                zone: container,
+                mode: 'static',
+                position: { left: '50%', top: '50%' },
+                color: '#06b6d4',
+                size: 80
+            });
+
+            manager.on('move', (evt, data) => {
+                if (data && data.vector) {
+                    shotAngleX = data.vector.x; // -1 to +1 directional shot angle
+                }
+            });
+
+            manager.on('end', () => {
+                shotAngleX = 0;
+            });
+        }
+
+        /* PC Keyboard Support Controls */
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'KeyA' || e.code === 'ArrowLeft') shotAngleX = -1; // Offside
+            if (e.code === 'KeyD' || e.code === 'ArrowRight') shotAngleX = 1;  // Legside
+            if (e.code === 'Space') {
+                e.preventDefault();
+                handleHitAction();
+            }
+            if (e.shiftKey) selectShotType('loft');
+        });
+
+        /* ====================================================================
+           TEAM SELECTION & GAME FLOW STARTUP LOGIC
+           ==================================================================== */
+        function renderTeamSelectionGrid() {
+            const grid = document.getElementById('teamGrid');
+            grid.innerHTML = '';
+
+            Object.keys(TEAMS_DATA).forEach(key => {
+                const team = TEAMS_DATA[key];
+                const isSelected = key === selectedUserTeamKey;
+                
+                const card = document.createElement('div');
+                card.className = `p-2 md:p-3 rounded-2xl border text-center cursor-pointer transition transform hover:scale-105 ${isSelected ? 'bg-cyan-900/60 border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.4)]' : 'bg-slate-800/60 border-slate-700'}`;
+                card.onclick = () => selectTeam(key);
+                card.innerHTML = `
+                    <div class="text-2xl md:text-3xl">${team.flag}</div>
+                    <div class="text-[11px] font-bold mt-1 text-slate-200 font-orbitron">${key}</div>
+                `;
+                grid.appendChild(card);
+            });
+
+            renderSquadList();
+        }
+
+        function selectTeam(key) {
+            selectedUserTeamKey = key;
+            // Set opponent as India or Bangladesh automatically
+            selectedOpponentKey = key === 'IND' ? 'BAN' : 'IND';
+            renderTeamSelectionGrid();
+        }
+
+        function renderSquadList() {
+            const team = TEAMS_DATA[selectedUserTeamKey];
+            document.getElementById('selectedTeamTitle').innerText = `${team.name.toUpperCase()} PLAYING XI`;
+            
+            const list = document.getElementById('squadList');
+            list.innerHTML = '';
+
+            team.squad.forEach((player, idx) => {
+                const isSel = idx === selectedBatterIndex;
+                const item = document.createElement('div');
+                item.className = `p-2 rounded-xl border text-xs flex justify-between items-center cursor-pointer ${isSel ? 'bg-amber-500/20 border-amber-400 text-yellow-300' : 'bg-slate-800/40 border-slate-700 text-slate-300'}`;
+                item.onclick = () => {
+                    selectedBatterIndex = idx;
+                    renderSquadList();
+                };
+                item.innerHTML = `
+                    <div>
+                        <div class="font-bold">${player.name}</div>
+                        <div class="text-[10px] text-slate-400">${player.style}</div>
+                    </div>
+                    <div class="font-black text-amber-400 font-orbitron">${player.rating}</div>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function setMatchOvers(overs) {
+            matchTotalOvers = overs;
+            totalAllowedBalls = overs * 6;
+            document.getElementById('ov2').className = overs === 2 ? 'px-3 py-1 bg-cyan-600 text-white rounded-lg text-xs font-bold font-orbitron shadow' : 'px-3 py-1 bg-slate-700 text-slate-300 rounded-lg text-xs font-bold font-orbitron';
+            document.getElementById('ov5').className = overs === 5 ? 'px-3 py-1 bg-cyan-600 text-white rounded-lg text-xs font-bold font-orbitron shadow' : 'px-3 py-1 bg-slate-700 text-slate-300 rounded-lg text-xs font-bold font-orbitron';
+        }
+
+        function startGameEngine() {
+            document.getElementById('modalTeamSelect').classList.add('hidden');
+            document.getElementById('hudHeader').classList.remove('hidden');
+            document.getElementById('hudControls').classList.remove('hidden');
+
+            // Setup HUD Names & Flags
+            document.getElementById('hudUserTeamFlag').innerText = TEAMS_DATA[selectedUserTeamKey].flag;
+            document.getElementById('hudUserTeamName').innerText = selectedUserTeamKey;
+            document.getElementById('hudOpponentTeamName').innerText = selectedOpponentKey;
+            
+            const currentBatter = TEAMS_DATA[selectedUserTeamKey].squad[selectedBatterIndex];
+            document.getElementById('hudBatterName').innerText = currentBatter.name;
+
+            // Reset Game Stats
+            matchScore = 0;
+            matchWickets = 0;
+            ballsBowledCount = 0;
+            gameState = 'READY_BOWL';
+
+            init3DScene();
+            initMobileJoystick();
+            updateHUDScoreboard();
+
+            if (!animationFrameId) animateLoop();
+
+            updateBroadcastBanner("MATCH STARTED! TAP START BOWL");
+            speakCommentary("Welcome to the stadium! Match is about to begin.", "স্টেডিয়ামে আপনাকে স্বাগতম! খেলা শুরু হতে যাচ্ছে।");
+        }
+
+        function evaluateMatchEnd() {
+            gameState = 'COMPLETED';
+            const modal = document.getElementById('modalMatchResult');
+            modal.classList.remove('hidden');
+
+            const isWin = matchScore >= targetRuns;
+            document.getElementById('resTitle').innerText = isWin ? `VICTORY FOR ${TEAMS_DATA[selectedUserTeamKey].name.toUpperCase()}!` : "MATCH OVER";
+            document.getElementById('resDesc').innerText = isWin ? `Sensational batting! Chased down target in ${ballsBowledCount} balls.` : `Scored ${matchScore} runs. Target was ${targetRuns}.`;
+            document.getElementById('resScore').innerText = `${matchScore}/${matchWickets} (${Math.floor(ballsBowledCount/6)}.${ballsBowledCount%6})`;
+            document.getElementById('resTarget').innerText = `${targetRuns}`;
+        }
+
+        function restartGameToMenu() {
+            document.getElementById('modalMatchResult').classList.add('hidden');
+            document.getElementById('modalTeamSelect').classList.remove('hidden');
+        }
+
+        // Initialize Menu Screen on window load
+        window.onload = () => {
+            renderTeamSelectionGrid();
+        };
+    </script>
+</body>
+</html>
